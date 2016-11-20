@@ -3,13 +3,132 @@
 
 #include "stdafx.h"
 #include<fstream>
-#include<list>
+#include<list> 
+#include<string>
 
 #include "constant.h"
 #include "RLEClass.h"
 #include "DCT.h"
 #include "universe.h"
 using namespace std;
+
+#define SOI   0xffd8
+#define EOI   0xffd9
+#define SOF0  0xffc0
+#define SOF1  0xffc1
+#define SOF2  0xffc2
+#define SOF3  0xffc3
+#define SOF5  0xffc5
+#define SOS   0xffda
+#define DQT   0xffdb
+#define DHT   0xffc4
+#define DNL   0xffdc
+
+string DcTableString = "dc.tab";
+string AcTableString = "ac.tab";
+ofstream outfile( "test_1.jpg", ios_base::binary );
+
+void WriteWordFlag( int val )
+{
+    /*
+    write a word into file.
+    */
+     unsigned char tmp;
+     //two bits
+     unsigned int val1 = val;
+     //get high byte.
+     tmp = ( val1 >> 8 );
+     outfile << tmp;
+     //get low byte.
+     tmp = val1;
+     outfile << tmp;
+ }
+
+void WriteByteFlag( unsigned char val )
+{
+    /*
+    Write a byte into file.
+    */
+    unsigned char tmp = val;
+    outfile << tmp;
+}
+
+void GENJPG( string finalString )
+{
+     int x;
+     unsigned char gray;
+     unsigned char tempChar;
+     char filename[20];
+     int handle,temp;
+    //---------------------------
+     WriteWordFlag( SOI );
+    //-----------------------
+     WriteWordFlag( DQT );
+     WriteWordFlag( 67 );
+     WriteByteFlag( 0x03 );
+     for( int i = 0; i < 64; i++ )
+     {
+        temp=QuanCoe[zigzagY[i]][zigzagX[i]];
+        unsigned int tempInt = temp;
+        unsigned char Char = temp;
+	    WriteByteFlag(Char);
+     }
+
+     //Huffman dc table
+     WriteWordFlag(DHT);
+     WriteWordFlag(31);
+     //00 indicate the DC Coefficient table.
+     WriteByteFlag(0x00);
+     //write dc coefficient table into file
+     ifstream d_table( DcTableString, ios_base::binary );
+     for( int i = 0; i < 28; i++ )
+     {
+        tempChar = d_table.get();
+	    WriteByteFlag(tempChar);
+     }
+     d_table.close();
+
+     //Huffman ac table
+     WriteWordFlag(DHT);
+     WriteWordFlag(181);
+     //11 indicate the AC Cofficient table
+     WriteByteFlag(0x11);
+     //write ac coefficient table into file
+     ifstream a_table( AcTableString , ios_base::binary );
+     for( int i = 1; i <= 178; i++ )
+     {
+        tempChar = a_table.get();
+	    WriteByteFlag(tempChar);
+     }
+     a_table.close();
+
+    //------------------------
+     WriteWordFlag(SOF0);
+     //start of frame length
+     WriteWordFlag(11);
+     //precision, 8 bits for our experiment.
+     WriteByteFlag(8);
+     //image height
+     WriteWordFlag(256);
+     //image width
+     WriteWordFlag(256);
+     //channel
+     WriteByteFlag(1);
+     WriteByteFlag(0);//c
+     WriteByteFlag(0x11);//h,v
+     WriteByteFlag(3);//tq
+
+    //------------------------
+     WriteWordFlag(SOS);
+     WriteWordFlag(8);//ls
+     WriteByteFlag(1);//ns
+     WriteByteFlag(0);
+     WriteByteFlag(0x01);//cs,td,ta
+     WriteByteFlag(0);
+     WriteByteFlag(63);
+     WriteByteFlag(0);//ss,se,ah,al
+    //-----------------------------------------------------------
+}
 
 
 int** readImage( string filename, int &imgHigh, int &imgWidth )
@@ -23,7 +142,7 @@ int** readImage( string filename, int &imgHigh, int &imgWidth )
         imgWidth : width of image, it will be changed by calling this function.
     */
 
-    if ( !isBatFile( filename ) )
+    if ( 0 )
     {
         throw exception( "we can not deal with file except .bat now." );
     }
@@ -310,9 +429,8 @@ string paddingZeros( string tempString )
 }
 
 
-void writeJPEG( string filename, string finalString)
+void writeJPEG( string finalString)
 {
-    ofstream outfile( filename, ios_base::binary );
     if( !outfile )
     {
         throw( "outfile cannot be created." );
@@ -320,6 +438,7 @@ void writeJPEG( string filename, string finalString)
     int target;
     char targetChar;
     unsigned char temp;
+    GENJPG( finalString );
     for ( int i = 0; i < ( finalString.length() / 8 ); i++ )
     {
         target = 0;
@@ -343,6 +462,8 @@ void writeJPEG( string filename, string finalString)
     }
     targetChar = (char)target;
     outfile << targetChar;
+    
+    WriteWordFlag(EOI);
     outfile.close();
 }
 
@@ -375,10 +496,10 @@ int _tmain(int argc, _TCHAR* argv[])
         finalString.clear();
         finalString = paddingZeros(tempString);
         cout<<"finalLength:"<<finalString.length()<<endl;
-        writeJPEG("1.dat", finalString );
-        ofstream txtFile("jpg.txt");
-        txtFile<<finalString;
-        txtFile.close();
+        writeJPEG( finalString );
+        //ofstream txtFile("jpg.txt");
+        //txtFile<<finalString;
+        //txtFile.close();
     }
     catch(exception &e)
     {
