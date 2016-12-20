@@ -1,29 +1,29 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
+from kernelMethod import *
+from dataSource import *
 
-def Dot( x1, x2 ):
-    assert len(x1.shape) == 1
-    assert len(x2.shape) == 1
-    return np.dot(x1, x2)
-
-def linearData( size = (100,2) ):
-    data = 100 * np.random.random(size) - 50
-    label = (np.dot( data, np.array([1,0.3]) ) + 0.2 ) > 0 
-    label = label * 2 - 1
-    return data,label
 
 class svm(object):
 
     def __init__(self, kernelMethod=Dot, dataSource=linearData,eps = 1e-3, tol = 1e-3, C = 1 ):
         '''
+        initialize some settings of this machine.
         
+        parameter:
+            kernelMethod : a kernel method from kernelMethod.py
+            dataSource : a getting source of data method from dataSource.py
+            eps : 
+            tol : absolute error toleration
+            C : C parameter of svm
         '''
         self.kernelMethod = kernelMethod
         self.eps = eps
         self.dataSource = dataSource
         self.tol = tol
         self.C = C
+        
     def _init_w(self, size = 2 , force = False):
         '''
         initialize w.
@@ -49,30 +49,39 @@ class svm(object):
         self.lm = np.zeros(size)
         
     def getData(self):
-        '''
-        
-        '''
         self.data, self.label = self.dataSource()
         
     def getLM(self,i):
+        '''
+        get i-th lagrange multiplier 
+        '''
         return self.lm[i]
     
     def target(self, i):
+        '''
+        get i-th data's label
+        '''
         return self.label[i]
     
     def output(self, i):
-        #print(self.w.shape, self.data.shape,i)
+        '''
+        get i-th data's output according current parameters.
+        '''
         
-        #a = np.dot(self.w,self.data[i])
-        #return ( a  + self.b )[0]
-        if hasattr(self,'E') == False:
-            self.E = np.dot(self.data, self.w) - self.b
-        return self.E[i]
+        if hasattr(self,'U') == False:
+            self.U = np.dot(self.data, self.w) - self.b
+        return self.U[i]
 
     def point(self, i):
+        '''
+        get i-th data.
+        '''
         return self.data[i]
         
     def getLH(self, alpha1, alpha2, y1, y2):
+        '''
+        get L and H according smo analyse.
+        '''
         if y1 * y2 < 0 :
             L = max(0, alpha2 - alpha1)
             H = min(self.C, self.C + alpha2 - alpha1 )
@@ -83,6 +92,9 @@ class svm(object):
 
     
     def getLHobj(alpha1, alpha2, E1, E2, y1, y2, L, H, k11, k12, k22, s):
+        '''
+        get bojective function at points L and H.
+        '''
         f1 = y1 * ( E1 + self.b ) - alpha1 * k11 - s * alpha2 * k12
         f2 = y2 * ( E2 + self.b ) - s * alpha1 * k12 - alpha2 * k22
         L1 = alpha1 + s * ( alpha2 - L )
@@ -93,17 +105,27 @@ class svm(object):
         return phi_L, phi_H
        
     def notAtBound(self, alpha):
+        '''
+        whether alpha isn't at the bounds or not.
+        '''
         if alpha > 0 and alpha < self.C :
             return True
         else:
             return False
+            
     def notOnBound(self, alpha):
+        '''
+        whether alpha is non-zero and non-C point or not.
+        '''
         if abs(alpha - 0)<self.tol and abs(alpha - self.C) < self.tol :
             return True
         else:
             return False
              
     def updateThreshold(self, alpha1, alpha2, E1, E2, y1, y2, k11, k12, k22, a1, a2):
+        '''
+        update b according to analyse of smo.
+        '''
         b1 = E1 + y1 * ( a1 - alpha1 ) * k11 + y2 * ( a2 - alpha2 ) * k12 + self.b
         b2 = E2 + y1 * ( a1 - alpha1 ) * k12 + y2 * ( a2 - alpha2 ) * k22 + self.b
         if self.notAtBound(alpha1) and self.notAtBound(alpha2) :
@@ -119,15 +141,25 @@ class svm(object):
             self.b = b1
             
     def updateWeight(self, alpha1, alpha2, y1, y2, i1, i2, a1, a2):
-    
-        self.w = self.w + y1 * ( a1 - alpha1 ) * self.point(i1) + y2 * ( a2 - alpha2 ) * self.point(i2)
-    
+        '''
+        update w.
+        '''
+        if self.KernelMethod == Dot:
+            self.w = self.w + y1 * ( a1 - alpha1 ) * self.point(i1) + y2 * ( a2 - alpha2 ) * self.point(i2)
+        else:
+            raise ValueError('non linear svm was not avaliable now.')
+            
     def updateErrorCache(self):
-        
-        self.E = np.dot( self.data, self.w) - self.b
+        '''
+        update u.
+        '''
+        self.U = np.dot( self.data, self.w) - self.b
         
         
     def updateLM(self,i1, i2, a1, a2):
+        '''
+        update lagrange multiplier.
+        '''
         self.lm[i1] = a1
         self.lm[i2] = a2
         
@@ -147,7 +179,7 @@ class svm(object):
         s = y1 * y2
         L,H = self.getLH(alpha1, alpha2, y1, y2)
         #if 
-        if ( L == H):
+        if ( abs(L - H) < self.tol ):
             return 0
         k11 = self.kernelMethod(self.point(i1),self.point(i1))
         k12 = self.kernelMethod(self.point(i1),self.point(i2))
